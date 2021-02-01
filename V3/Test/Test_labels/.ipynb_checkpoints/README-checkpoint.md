@@ -1,1 +1,0 @@
-These images were used for testing the segmenter.
