@@ -1,5 +1,8 @@
 import os
-import sys
+import io
+from flask import Flask, request, jsonify
+from flask_restful import Resource, Api
+
 import math
 
 import cv2
@@ -17,6 +20,11 @@ from keras.layers.convolutional import Conv2D, Conv2DTranspose
 from keras.layers.pooling import MaxPooling2D
 from keras.layers.merge import concatenate
 from keras.optimizers import Adam
+import keras.backend.tensorflow_backend as tb
+tb._SYMBOLIC_SCOPE.value = True
+
+app = Flask(__name__)
+api = Api(app)
 
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -44,7 +52,7 @@ def conv2d_block(input_tensor, n_filters, kernel_size = 3, batchnorm = True):
     return x
 
 def get_unet(input_img, n_filters = 16, dropout = 0.1, batchnorm = True):
-    """Function to define the UNET Model"""
+    # """Function to define the UNET Model"""
     # Contracting Path
     c1 = conv2d_block(input_img, n_filters * 1, kernel_size = 3, batchnorm = batchnorm)
     p1 = MaxPooling2D((2, 2))(c1)
@@ -89,15 +97,7 @@ def get_unet(input_img, n_filters = 16, dropout = 0.1, batchnorm = True):
     model = Model(inputs=[input_img], outputs=[outputs])
     return model
 
-def main():
-    input_img = Input((IMG_HEIGHT, IMG_WIDTH, 3), name='img')
-    model = get_unet(input_img, n_filters=16, dropout=0.05, batchnorm=True)
-    model.compile(optimizer=Adam(), loss="binary_crossentropy", metrics=["accuracy"])
-    model.load_weights('face-segmentation.h5')
-
-    img_path = sys.argv[1]
-
-    image = imread(img_path)[:,:,:IMG_CHANNELS]
+def segment_image(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     faceCascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     faces = faceCascade.detectMultiScale(
@@ -106,11 +106,7 @@ def main():
         minNeighbors=3,
         minSize=(30, 30)
     )
-
-    print("Found {0} Faces!".format(len(faces)))
-
     dim_x, dim_y = image.shape[0], image.shape[1]
-    transpose_x, transpose_y = dim_x *0.05, dim_y * 0.05
 
     X = np.zeros((len(faces), 128, 128, 3), dtype=np.float32)
     X_positions = []
@@ -136,8 +132,26 @@ def main():
         section = resize(np.squeeze(preds_test[i]), 
                         (coords[3], coords[2]), mode='constant', preserve_range=True)
         upsampled_mask[coords[1]:coords[3]+coords[1], coords[0]:coords[2]+coords[0]] += section.astype(np.uint8)
-    
-    plt.imsave(os.path.split(img_path)[0] + '/' + os.path.splitext(os.path.basename(img_path))[0] + '_mask.jpg', upsampled_mask, cmap='Greys_r')
+    return upsampled_mask
 
-if __name__ == "__main__":
-    main()
+class HelloWorld(Resource):
+    def get(self):
+        return {'hello': 'world'}
+
+    def post(self):
+        files = request.files.to_dict()
+        print(files)
+        img = imread(io.BytesIO(files['image'].read()))[:,:,:3]
+        mask = segment_image(img)
+        response = {'Status': 'success', 'message': 'good request', 'mask': mask.tolist()}
+        return jsonify(response)
+
+
+api.add_resource(HelloWorld, '/')
+
+if __name__ == '__main__':
+    input_img = Input((IMG_HEIGHT, IMG_WIDTH, 3), name='img')
+    model = get_unet(input_img, n_filters=16, dropout=0.05, batchnorm=True)
+    model.compile(optimizer=Adam(), loss="binary_crossentropy", metrics=["accuracy"])
+    model.load_weights('face-segmentation.h5')
+    app.run(host="0.0.0.0",port=5000,threaded=False)
