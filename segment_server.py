@@ -2,14 +2,12 @@ import os
 import io
 from flask import Flask, request, jsonify
 from flask_restful import Resource, Api
-
+from flask_cors import CORS
 import math
 
 import cv2
 
 import numpy as np
-
-import matplotlib.pyplot as plt
 
 from skimage.io import imread
 from skimage.transform import resize
@@ -21,10 +19,13 @@ from keras.layers.pooling import MaxPooling2D
 from keras.layers.merge import concatenate
 from keras.optimizers import Adam
 import keras.backend.tensorflow_backend as tb
+
+
 tb._SYMBOLIC_SCOPE.value = True
 
 app = Flask(__name__)
 api = Api(app)
+cors = CORS(app, resources={r"/*": {"origins": "*"}})
 
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -134,7 +135,7 @@ def segment_image(image):
         upsampled_mask[coords[1]:coords[3]+coords[1], coords[0]:coords[2]+coords[0]] += section.astype(np.uint8)
     return upsampled_mask
 
-class HelloWorld(Resource):
+class Segment(Resource):
     def get(self):
         return {'hello': 'world'}
 
@@ -147,7 +148,7 @@ class HelloWorld(Resource):
         return jsonify(response)
 
 
-api.add_resource(HelloWorld, '/')
+api.add_resource(Segment, '/')
 
 if __name__ == '__main__':
     input_img = Input((IMG_HEIGHT, IMG_WIDTH, 3), name='img')
