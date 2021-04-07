@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify
 from flask_restful import Resource, Api
 from flask_cors import CORS
 import math
+import redis
 
 import cv2
 
@@ -24,6 +25,7 @@ import keras.backend.tensorflow_backend as tb
 tb._SYMBOLIC_SCOPE.value = True
 
 app = Flask(__name__)
+db = redis.StrictRedis(host="localhost" port=6379, db=0)
 api = Api(app)
 cors = CORS(app, resources={r"/*": {"origins": "*"}})
 
@@ -34,6 +36,22 @@ IMG_WIDTH = 128 # for faster computing
 IMG_HEIGHT = 128 # for faster computing
 IMG_CHANNELS = 3
 
+def base64_encode_image(a):
+    # base64 encode the input NumPy array
+	return base64.b64encode(a).decode("utf-8")
+
+def base64_decode_image(a, dtype, shape):
+	# if this is Python 3, we need the extra step of encoding the
+	# serialized NumPy string as a byte object
+	if sys.version_info.major == 3:
+		a = bytes(a, encoding="utf-8")
+	# convert the string to a NumPy array using the supplied data
+	# type and target shape
+	a = np.frombuffer(base64.decodestring(a), dtype=dtype)
+	a = a.reshape(shape)
+	# return the decoded image
+	return a
+
 def conv2d_block(input_tensor, n_filters, kernel_size = 3, batchnorm = True):
     """Function to add 2 convolutional layers with the parameters passed to it"""
     # first layer
@@ -42,14 +60,14 @@ def conv2d_block(input_tensor, n_filters, kernel_size = 3, batchnorm = True):
     if batchnorm:
         x = BatchNormalization()(x)
     x = Activation('relu')(x)
-    
+
     # second layer
     x = Conv2D(filters = n_filters, kernel_size = (kernel_size, kernel_size),\
               kernel_initializer = 'he_normal', padding = 'same')(input_tensor)
     if batchnorm:
         x = BatchNormalization()(x)
     x = Activation('relu')(x)
-    
+
     return x
 
 def get_unet(input_img, n_filters = 16, dropout = 0.1, batchnorm = True):
@@ -58,42 +76,42 @@ def get_unet(input_img, n_filters = 16, dropout = 0.1, batchnorm = True):
     c1 = conv2d_block(input_img, n_filters * 1, kernel_size = 3, batchnorm = batchnorm)
     p1 = MaxPooling2D((2, 2))(c1)
     p1 = Dropout(dropout)(p1)
-    
+
     c2 = conv2d_block(p1, n_filters * 2, kernel_size = 3, batchnorm = batchnorm)
     p2 = MaxPooling2D((2, 2))(c2)
     p2 = Dropout(dropout)(p2)
-    
+
     c3 = conv2d_block(p2, n_filters * 4, kernel_size = 3, batchnorm = batchnorm)
     p3 = MaxPooling2D((2, 2))(c3)
     p3 = Dropout(dropout)(p3)
-    
+
     c4 = conv2d_block(p3, n_filters * 8, kernel_size = 3, batchnorm = batchnorm)
     p4 = MaxPooling2D((2, 2))(c4)
     p4 = Dropout(dropout)(p4)
-    
+
     c5 = conv2d_block(p4, n_filters = n_filters * 16, kernel_size = 3, batchnorm = batchnorm)
-    
+
     # Expansive Path
     u6 = Conv2DTranspose(n_filters * 8, (3, 3), strides = (2, 2), padding = 'same')(c5)
     u6 = concatenate([u6, c4])
     u6 = Dropout(dropout)(u6)
     c6 = conv2d_block(u6, n_filters * 8, kernel_size = 3, batchnorm = batchnorm)
-    
+
     u7 = Conv2DTranspose(n_filters * 4, (3, 3), strides = (2, 2), padding = 'same')(c6)
     u7 = concatenate([u7, c3])
     u7 = Dropout(dropout)(u7)
     c7 = conv2d_block(u7, n_filters * 4, kernel_size = 3, batchnorm = batchnorm)
-    
+
     u8 = Conv2DTranspose(n_filters * 2, (3, 3), strides = (2, 2), padding = 'same')(c7)
     u8 = concatenate([u8, c2])
     u8 = Dropout(dropout)(u8)
     c8 = conv2d_block(u8, n_filters * 2, kernel_size = 3, batchnorm = batchnorm)
-    
+
     u9 = Conv2DTranspose(n_filters * 1, (3, 3), strides = (2, 2), padding = 'same')(c8)
     u9 = concatenate([u9, c1])
     u9 = Dropout(dropout)(u9)
     c9 = conv2d_block(u9, n_filters * 1, kernel_size = 3, batchnorm = batchnorm)
-    
+
     outputs = Conv2D(1, (1, 1), activation='sigmoid')(c9)
     model = Model(inputs=[input_img], outputs=[outputs])
     return model
@@ -130,7 +148,7 @@ def segment_image(image):
     upsampled_mask = np.zeros((dim_x, dim_y), dtype=np.uint8)
     for i in range(len(preds_test)):
         coords = X_positions[i]
-        section = resize(np.squeeze(preds_test[i]), 
+        section = resize(np.squeeze(preds_test[i]),
                         (coords[3], coords[2]), mode='constant', preserve_range=True)
         upsampled_mask[coords[1]:coords[3]+coords[1], coords[0]:coords[2]+coords[0]] += section.astype(np.uint8)
     return upsampled_mask
