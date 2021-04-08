@@ -15,8 +15,8 @@ img = open(sys.argv[1], 'rb')
 files={'image': (sys.argv[1],img,'multipart/form-data')}
 
 x = requests.post(url, files=files)
-print(x.json()['message'])
+print(x.json()['success'])
 
-img = x.json()['mask']
+img = x.json()['predictions']
 plt.imshow(img)
 plt.show()
