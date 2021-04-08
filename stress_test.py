@@ -13,16 +13,16 @@ IMAGE_PATH = "./images/protest_01.jpg"
 
 # initialize the number of requests for the stress test along with
 # the sleep amount between requests
-NUM_REQUESTS = 5
+NUM_REQUESTS = 500
 SLEEP_COUNT = 0.05
 
 def call_predict_endpoint(n):
 	# load the input image and construct the payload for the request
 	image = open(IMAGE_PATH, "rb").read()
-	payload = {"image": image}
+	payload = {"image": ('protest_01.jpg',image,'multipart/form-data')}
 
 	# submit the request
-	r = requests.post(KERAS_REST_API_URL, files=payload).json()
+	r = requests.post('http://127.0.0.1:5000/', files=payload).json()
 
 	# ensure the request was sucessful
 	if r["success"]:
@@ -42,4 +42,6 @@ for i in range(0, NUM_REQUESTS):
 
 # insert a long sleep so we can wait until the server is finished
 # processing the images
+print("finished threads")
 time.sleep(300)
+print("finished timer")

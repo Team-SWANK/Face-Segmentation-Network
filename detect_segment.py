@@ -132,6 +132,7 @@ def main():
         
         # check to see if we need to process the batch
         if len(imageIDs) > 0:
+            print('* ImageIDs: {}'.format(imageIDs))
             print("* Batch size: {}".format(batch.shape))
             faces = {}
             for i in range(len(batch)):
