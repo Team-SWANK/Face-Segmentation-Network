@@ -3,7 +3,8 @@ import io
 from flask import Flask, request, jsonify
 from flask_restful import Resource, Api
 from flask_cors import CORS
-# import math
+import math
+import redis
 
 # import cv2
 
@@ -32,6 +33,7 @@ from PIL import Image
 # tb._SYMBOLIC_SCOPE.value = True
 
 app = Flask(__name__)
+db = redis.StrictRedis(host="localhost", port=6379, db=0)
 api = Api(app)
 cors = CORS(app, resources={r"/*": {"origins": "*"}})
 db = redis.StrictRedis(host=settings.REDIS_HOST,
