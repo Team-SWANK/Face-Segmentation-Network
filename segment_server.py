@@ -201,6 +201,9 @@ class Segment(Resource):
 
                 # sleep for a small amount to give the model a chance
                 # to classify the input image
+                for key in db.scan_iter():
+                    print(key)
+
                 time.sleep(settings.CLIENT_SLEEP)
 
             # indicate that the request was a success

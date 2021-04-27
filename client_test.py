@@ -8,7 +8,7 @@ def stringToRGB(base64_string):
     return imread(io.BytesIO(imgdata))
 
 os.environ['NO_PROXY'] = '127.0.0.1'
-url = 'http://13.57.50.47:5000/'
+url = 'http://127.0.0.1:8000/Segment'
 
 img = open(sys.argv[1], 'rb')
 
